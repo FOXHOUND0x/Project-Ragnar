@@ -8,8 +8,10 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/aws/aws-sdk-go-v2/aws"
 	"github.com/aws/aws-sdk-go-v2/config"
-	"github.com/aws/aws-sdk-go/service/cognitoidentityprovider"
+	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider"
+	"github.com/aws/aws-sdk-go-v2/service/cognitoidentityprovider/types"
 	"github.com/spf13/cobra"
 	"golang.org/x/term"
 )
@@ -45,27 +47,37 @@ var loginCmd = &cobra.Command{
 		}
 
 		fmt.Println("Successfully Authenticated")
+
 	},
 }
 
 func cognitoAuth(username, password string) (string, error) {
-	conf, err := config.LoadDefaultConfig(context.TODO())
+	cfg, err := config.LoadDefaultConfig(context.TODO())
 	if err != nil {
-		return "", fmt.Errorf("failed to load default AWS configuraiton from ~/.aws/config", err)
+		return "", fmt.Errorf("failed to load default AWS configuration from ~/.aws/config: %w", err)
 	}
 
-	cognitoClient := cognitoidentityprovider.NewFromConfig(conf)
+	cognitoClient := cognitoidentityprovider.NewFromConfig(cfg)
+	if userPoolID == "" {
+		fmt.Printf("Enter User Pool ID: ")
+		fmt.Scanln(&userPoolID)
+	}
+	if clientID == "" {
+		fmt.Printf("Enter Client ID: ")
+		fmt.Scanln(&clientID)
+	}
+
 	if userPoolID == "" || clientID == "" {
-		return "", fmt.Errorf("Cognito User pool ID and Client ID must be set")
+		return "", fmt.Errorf("user pool id or client id is empty")
 	}
 
 	authInput := &cognitoidentityprovider.InitiateAuthInput{
-		AuthFlow: cognitoidentityprovider.AuthFlowTypeUserPasswordAuth,
-		ClientId: &clientID,
+		AuthFlow: types.AuthFlowTypeUserPasswordAuth,
 		AuthParameters: map[string]string{
 			"USERNAME": username,
 			"PASSWORD": password,
 		},
+		ClientId: aws.String(clientID),
 	}
 
 	authOutput, err := cognitoClient.InitiateAuth(context.TODO(), authInput)
@@ -74,7 +86,7 @@ func cognitoAuth(username, password string) (string, error) {
 	}
 
 	if authOutput.AuthenticationResult == nil || authOutput.AuthenticationResult.IdToken == nil {
-		return "", fmt.Errorf("Token is Null bro")
+		return "", fmt.Errorf("token is null")
 	}
 
 	return *authOutput.AuthenticationResult.IdToken, nil
